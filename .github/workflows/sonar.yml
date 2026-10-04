@@ -31,6 +31,7 @@ jobs:
         run: |-
           sonar-scanner \
             -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.organization=xpertss \
             -Dsonar.projectKey=create-pull-request \
             -Dsonar.projectVersion="$(git describe --tags --always)" \
             -Dsonar.inclusions=.github/workflows/**,action.yml,**/*.sh \

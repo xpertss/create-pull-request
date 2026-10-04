@@ -28,11 +28,9 @@ const project = new GitHubActionProject({
           base: 'main',
           labels: 'dogfood-test',
         },
+        // the assert step runs under `set -euo pipefail` (added by the
+        // package since v0.0.19), so any failing line fails the job
         assertions: [
-          // GH `run:` fails a step only on the LAST line's exit code, so
-          // set -e is needed for multi-line assertions to be effective.
-          // (filed as a defect against @xpertss/projen-types)
-          'set -euo pipefail',
           '[ "${{ steps.create.outputs.pull-number }}" -gt 0 ]',
           '[ -n "${{ steps.create.outputs.head-sha }}" ]',
           '[ -n "${{ steps.create.outputs.pull-request }}" ]',
@@ -57,7 +55,6 @@ const project = new GitHubActionProject({
           labels: 'dogfood-test',
         },
         assertions: [
-          'set -euo pipefail',
           '[ "${{ steps.rerun.outputs.pull-number }}" -gt 0 ]',
           '[ "${{ steps.rerun.outputs.pull-number }}" = "${{ steps.create.outputs.pull-number }}" ]',
         ],
