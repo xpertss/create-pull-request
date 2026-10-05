@@ -5,7 +5,6 @@ const project = new GitHubActionProject({
   name: 'create-pull-request',
   description:
     'Commit the working tree, push a head branch, and create or reuse the PR for that branch',
-  sonarHostUrl: 'https://sonarcloud.io',
   dogfood: {
     // F006's load-bearing behaviors, exercised end-to-end against this
     // repo: the create path (commit, push, open PR) and the re-run path
