@@ -1,0 +1,63 @@
+---
+name: Create Pull Request
+description: >-
+  Commits the working tree, pushes a machine-owned head branch, and creates or
+  reuses the pull request for that branch.
+inputs:
+  token:
+    description: >-
+      GitHub token used for the git push and all gh API calls. The pull request
+      is created by the token owner (PR `user` field), so a PAT (e.g.
+      PROJEN_GITHUB_TOKEN) is recommended so PRs trigger downstream workflows.
+    default: ${{ github.token }}
+  commit-message:
+    description: The full commit message (subject line plus body).
+    required: true
+  branch:
+    description: >-
+      The head branch name, e.g. `github-actions/upgrade-main`. The branch is
+      machine-owned and is force-pushed.
+    required: true
+  base:
+    description: >-
+      The base branch for the pull request. Defaults to the ref the workflow
+      runs from ($GITHUB_REF_NAME). Pass it explicitly in a `pull_request`
+      context, where $GITHUB_REF_NAME is the PR merge ref, not a branch.
+  title:
+    description: The pull request title. Defaults to the first line of `commit-message`.
+  body:
+    description: The pull request body. Defaults to the full `commit-message`.
+  labels:
+    description: >-
+      Comma-separated labels applied to the pull request. Labels are ensured on
+      both the create and the reuse path.
+  author:
+    description: >-
+      The commit author in `Name <email>` form. Affects commit metadata only -
+      the PR's `user` field is the token owner.
+    default: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+  committer:
+    description: >-
+      The commit committer in `Name <email>` form. Defaults to the value of
+      `author`. Affects commit metadata only.
+  signoff:
+    description: Append a `Signed-off-by` trailer to the commit message.
+    default: 'true'
+outputs:
+  head-ref:
+    description: The head branch name.
+  head-sha:
+    description: The SHA of the pushed commit; empty when nothing was pushed.
+  pull-number:
+    description: The pull request number, or `0` when no PR exists or was created.
+  pull-request:
+    description: The pull request URL, or empty.
+  commit-id:
+    description: The SHA of the pushed commit (evans-compatible alias of `head-sha`).
+runs:
+  using: composite
+  steps:
+    - name: Create or reuse the pull request
+      id: create-pr
+      shell: bash
+      run: ${{ github.action_path }}/create-pr.sh
