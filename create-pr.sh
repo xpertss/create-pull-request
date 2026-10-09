@@ -204,40 +204,22 @@ find_open_pr "$branch"
 # checkout versions). Git sends that header on the push and it shadows the
 # `gh auth setup-git` credential helper: with a read-only job token the push
 # 403s, and with contents:write it goes out as GITHUB_TOKEN instead of the PAT.
-# So we suppress the persisted header for the push only (the PAT credential
-# helper then authenticates) and restore it on exit, leaving the checkout's
-# config exactly as found for later steps in the calling job.
-server_url="$GITHUB_SERVER_URL"
-extraheader_key="http.${server_url}/.extraheader"
-SUPPRESSED=()  # "file<TAB>value" pairs captured so the restore is exact
-
-restore_checkout_header() {
-  local entry file value
-  for entry in "${SUPPRESSED[@]}"; do
-    file="${entry%%$'\t'*}"
-    value="${entry#*$'\t'}"
-    git config --file "$file" --add "$extraheader_key" "$value"
-  done
-}
-
-suppress_checkout_header() {
-  local line origin file
-  while IFS= read -r line; do
-    origin="${line%%$'\t'*}"
-    file="${origin#file:}"
-    SUPPRESSED+=("${file}"$'\t'"${line#*$'\t'}")
-    git config --file "$file" --unset-all "$extraheader_key"
-  done < <(git config --show-origin --get-all "$extraheader_key" || true)
-}
-
-# Restore on any exit (push success or failure) so the config is never left
-# modified.
-trap restore_checkout_header EXIT
-suppress_checkout_header
+# An empty value for http.<url>.extraheader resets the list to empty
+# (git-config(1)), and -c has the highest config precedence, so the header is
+# cleared for this one command without writing to disk.
 log "Force-pushing branch '$branch'."
-git push -f origin "$branch"
+git -c "http.${GITHUB_SERVER_URL}/.extraheader=" push -f origin "$branch"
 
 # --- pull request ------------------------------------------------------------------
+
+# Write the body to a file: keeps it out of the process list and avoids the
+# 128 KiB per-argument limit for long multibyte bodies.
+if [[ -n "${RUNNER_TEMP:-}" ]]; then
+  body_file="${RUNNER_TEMP}/create-pr-body.txt"
+else
+  body_file="$(mktemp)"
+fi
+printf '%s\n' "$body" > "$body_file"
 
 if [[ -n "$OPEN_PR_NUMBER" ]]; then
   # Reuse path: the PR is already open. Update its title and body to the
@@ -246,23 +228,17 @@ if [[ -n "$OPEN_PR_NUMBER" ]]; then
   pull_number="$OPEN_PR_NUMBER"
   pull_url="$OPEN_PR_URL"
   log "Reusing open PR #$pull_number for branch '$branch'."
-  if [[ -n "${RUNNER_TEMP:-}" ]]; then
-    body_file="${RUNNER_TEMP}/create-pr-body.txt"
-  else
-    body_file="$(mktemp)"
-  fi
-  printf '%s\n' "$body" > "$body_file"
   gh pr edit "$pull_number" --title "$title" --body-file "$body_file" \
     "${add_label_args[@]}" "${add_assignee_args[@]}"
-  rm -f "$body_file"
 else
   # Create path: no open PR (or only closed/merged ones) for this branch.
   log "Creating a new pull request for branch '$branch' (base '$base')."
-  pr_out="$(gh pr create --head "$branch" --base "$base" --title "$title" --body "$body" \
+  pr_out="$(gh pr create --head "$branch" --base "$base" --title "$title" --body-file "$body_file" \
     "${label_args[@]}" "${assignee_args[@]}" --json number,url --jq '[.number, .url] | @tsv')"
   read -r pull_number pull_url <<< "$pr_out"
   log "Created PR #$pull_number: $pull_url"
 fi
+rm -f "$body_file"
 
 # --- outputs -----------------------------------------------------------------------
 

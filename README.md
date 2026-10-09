@@ -151,10 +151,9 @@ persistent path, and is never printed (no `set -x`, no `echo` of the token).
 **Push identity:** when `actions/checkout` persists its credential as an
 `http.<server-url>/.extraheader` entry (its default on v6+), `git push` would
 otherwise send that header alongside the token's credential, breaking the
-"push as the token" contract. The action transiently suppresses that entry for
-the duration of the push — and only that push — so the push authenticates
-exclusively as the `token`, then restores the entry exactly as found. The entry
-is never rewritten or removed.
+"push as the token" contract. The action clears the entry for the push command
+only, via per-command git config (`git -c`), so the push authenticates
+exclusively as the `token`. No git config file is modified.
 
 ### Invariants (what this action will never do)
 
@@ -163,6 +162,7 @@ is never rewritten or removed.
 - no tag creation or deletion
 - no `gh repo`/admin operations, no workflow dispatch, no issue/comment writes
 - no deletion of branches or PRs (cleanup is the *caller's* job)
+- no modification of the repository's git config
 - no reading of secrets other than the `token` input
 
 ### Residual risks (accepted, with mitigations)
