@@ -28,6 +28,7 @@ base="${INPUT_BASE:-${GITHUB_REF_NAME:-}}"
 title="${INPUT_TITLE:-}"
 body="${INPUT_BODY:-}"
 labels="${INPUT_LABELS:-}"
+assignees="${INPUT_ASSIGNEES:-}"
 author="${INPUT_AUTHOR:-$DEFAULT_IDENTITY}"
 committer="${INPUT_COMMITTER:-$author}"
 signoff="${INPUT_SIGNOFF:-true}"
@@ -96,6 +97,22 @@ if [[ -n "$labels" ]]; then
     if [[ -n "$label" ]]; then
       label_args+=("--label" "$label")
       add_label_args+=("--add-label" "$label")
+    fi
+  done
+fi
+
+# Build --assignee/--add-assignee args from the comma-separated $assignees
+# input (create uses --assignee, reuse uses --add-assignee).
+assignee_args=()
+add_assignee_args=()
+if [[ -n "$assignees" ]]; then
+  IFS=',' read -r -a assignee_arr <<< "$assignees"
+  for assignee in "${assignee_arr[@]}"; do
+    assignee="${assignee#"${assignee%%[![:space:]]*}"}"
+    assignee="${assignee%"${assignee##*[![:space:]]}"}"
+    if [[ -n "$assignee" ]]; then
+      assignee_args+=("--assignee" "$assignee")
+      add_assignee_args+=("--add-assignee" "$assignee")
     fi
   done
 fi
@@ -181,24 +198,68 @@ find_open_pr "$branch"
 # Force-push is required and intentional: the caller checks out the latest base
 # and applies a fresh patch, so the new history is not a descendant of the
 # previous run's branch. The branch is machine-owned.
+#
+# R1: actions/checkout persists the job's GITHUB_TOKEN as an http extraheader
+# for the server host (in .git/config, or in an included config file in newer
+# checkout versions). Git sends that header on the push and it shadows the
+# `gh auth setup-git` credential helper: with a read-only job token the push
+# 403s, and with contents:write it goes out as GITHUB_TOKEN instead of the PAT.
+# So we suppress the persisted header for the push only (the PAT credential
+# helper then authenticates) and restore it on exit, leaving the checkout's
+# config exactly as found for later steps in the calling job.
+server_url="$GITHUB_SERVER_URL"
+extraheader_key="http.${server_url}/.extraheader"
+SUPPRESSED=()  # "file<TAB>value" pairs captured so the restore is exact
+
+restore_checkout_header() {
+  local entry file value
+  for entry in "${SUPPRESSED[@]}"; do
+    file="${entry%%$'\t'*}"
+    value="${entry#*$'\t'}"
+    git config --file "$file" --add "$extraheader_key" "$value"
+  done
+}
+
+suppress_checkout_header() {
+  local line origin file
+  while IFS= read -r line; do
+    origin="${line%%$'\t'*}"
+    file="${origin#file:}"
+    SUPPRESSED+=("${file}"$'\t'"${line#*$'\t'}")
+    git config --file "$file" --unset-all "$extraheader_key"
+  done < <(git config --show-origin --get-all "$extraheader_key" || true)
+}
+
+# Restore on any exit (push success or failure) so the config is never left
+# modified.
+trap restore_checkout_header EXIT
+suppress_checkout_header
 log "Force-pushing branch '$branch'."
 git push -f origin "$branch"
 
 # --- pull request ------------------------------------------------------------------
 
 if [[ -n "$OPEN_PR_NUMBER" ]]; then
-  # Reuse path: the PR is already open; ensure the labels are present.
+  # Reuse path: the PR is already open. Update its title and body to the
+  # current inputs (the body embeds a per-run workflow URL) and ensure the
+  # labels and assignees are present.
   pull_number="$OPEN_PR_NUMBER"
   pull_url="$OPEN_PR_URL"
   log "Reusing open PR #$pull_number for branch '$branch'."
-  if [[ ${#add_label_args[@]} -gt 0 ]]; then
-    gh pr edit "$pull_number" "${add_label_args[@]}"
+  if [[ -n "${RUNNER_TEMP:-}" ]]; then
+    body_file="${RUNNER_TEMP}/create-pr-body.txt"
+  else
+    body_file="$(mktemp)"
   fi
+  printf '%s\n' "$body" > "$body_file"
+  gh pr edit "$pull_number" --title "$title" --body-file "$body_file" \
+    "${add_label_args[@]}" "${add_assignee_args[@]}"
+  rm -f "$body_file"
 else
   # Create path: no open PR (or only closed/merged ones) for this branch.
   log "Creating a new pull request for branch '$branch' (base '$base')."
   pr_out="$(gh pr create --head "$branch" --base "$base" --title "$title" --body "$body" \
-    "${label_args[@]}" --json number,url --jq '[.number, .url] | @tsv')"
+    "${label_args[@]}" "${assignee_args[@]}" --json number,url --jq '[.number, .url] | @tsv')"
   read -r pull_number pull_url <<< "$pr_out"
   log "Created PR #$pull_number: $pull_url"
 fi

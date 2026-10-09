@@ -23,6 +23,7 @@ that commits the working tree, pushes a machine-owned head branch, and creates
 | `title` | no | first line of `commit-message` | PR title. |
 | `body` | no | full `commit-message` | PR body. |
 | `labels` | no | — | Comma-separated. Ensured on both the create and the reuse path. |
+| `assignees` | no | — | Comma-separated logins. Ensured on both the create and the reuse path. |
 | `author` | no | `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>` | **Commit** author (`Name <email>` form) only. |
 | `committer` | no | value of `author` | **Commit** committer (`Name <email>` form) only. |
 | `signoff` | no | `true` | Append a `Signed-off-by` trailer. |
@@ -53,18 +54,17 @@ current `PROJEN_GITHUB_TOKEN` usage), or the default token with job
 | Local changes | Open PR for `branch` | Action |
 |---|---|---|
 | none | any | no commit, no push; output the existing PR if one is open; **green no-op** |
-| yes | none | commit → push → `gh pr create` (title, body, labels) → outputs |
-| yes | open | commit → **force-push** `branch` → reuse PR number → ensure labels |
+| yes | none | commit → push → `gh pr create` (title, body, labels, assignees) → outputs |
+| yes | open | commit → **force-push** `branch` → reuse PR number → update title/body → ensure labels + assignees |
 | yes | closed/merged | commit → force-push → `gh pr create` (new PR) |
 
 - **Force-push is required and intentional:** callers check out the latest base
   and apply a fresh patch, so the new history is based on the base, not on the
   previous run's branch. The branch is machine-owned.
-- **Labels are ensured on both create and reuse paths** — downstream
-  `auto-approve`/`auto-merge` automation depends on them.
-- **Known limitation (parity with evans, kept on purpose):** an existing open
-  PR's title/body are **not** updated on reuse. The body embeds a per-run
-  workflow URL and stays from the first run.
+- **Labels and assignees are ensured on both create and reuse paths** —
+  downstream `auto-approve`/`auto-merge` automation depends on them.
+- **Title and body are updated on reuse** to the current run's inputs, so an
+  existing open PR always reflects the latest commit.
 
 ## Example
 
@@ -123,7 +123,7 @@ current release). The action uses only long-stable `gh` subcommands.
 |---|---|---|---|
 | `api.github.com` — `GET /repos/{o}/{r}/pulls?head=…` | read | token | `gh pr list` |
 | `api.github.com` — `POST /repos/{o}/{r}/pulls` | write | token | `gh pr create` |
-| `api.github.com` — `PATCH /repos/{o}/{r}/pulls/{n}` | write | token | `gh pr edit` (labels) |
+| `api.github.com` — `PATCH /repos/{o}/{r}/pulls/{n}` | write | token | `gh pr edit` (title, body, labels, assignees) |
 | `https://github.com/{o}/{r}.git` | push | token (via `gh auth setup-git` credential helper) | `git push -f` |
 
 Nothing else. The action does not call any other host or endpoint.
@@ -147,6 +147,14 @@ secret (PROJEN_GITHUB_TOKEN / github.token)
 The token never appears in any command line (no `x-access-token:` push URLs —
 `gh auth setup-git` exists precisely to avoid that), is never written to a
 persistent path, and is never printed (no `set -x`, no `echo` of the token).
+
+**Push identity:** when `actions/checkout` persists its credential as an
+`http.<server-url>/.extraheader` entry (its default on v6+), `git push` would
+otherwise send that header alongside the token's credential, breaking the
+"push as the token" contract. The action transiently suppresses that entry for
+the duration of the push — and only that push — so the push authenticates
+exclusively as the `token`, then restores the entry exactly as found. The entry
+is never rewritten or removed.
 
 ### Invariants (what this action will never do)
 
@@ -181,5 +189,4 @@ Release). Consumers:
 
 - `delete-branch` parity with evans v8 — not used by the org (auto-merge/branch
   protection handles deletion).
-- Updating the title/body of a reused PR (parity with evans).
 - Marketplace listing.

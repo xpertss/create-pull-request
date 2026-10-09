@@ -85,6 +85,7 @@ run_scenario() { # <label> <add-change:yes|no> <open-pr:0|1>
       FAKE_GH_CALL_LOG="$CALLS" FAKE_GH_TOKEN_FILE="$TOKENFILE" FAKE_GH_OPEN_PR="$open_pr" \
       INPUT_COMMIT_MESSAGE="test: $label" INPUT_BRANCH="test/dogfood" \
       INPUT_TOKEN="$TOKEN" INPUT_BASE="main" INPUT_LABELS="dogfood-test" \
+      INPUT_ASSIGNEES="octocat" INPUT_TITLE="Test PR title" INPUT_BODY="Test PR body" \
       PATH="$TMP/bin:$PATH" \
       bash "$SCRIPT"
 }
@@ -97,6 +98,7 @@ assert "head-sha is a real sha" "1" "$(is_sha "$(get_out head-sha)")"
 assert_eq "pull-number" "9999" "$(get_out pull-number)"
 assert_eq "pull-request" "https://github.com/fake/repo/pull/9999" "$(get_out pull-request)"
 assert "gh pr create was called" "1" "$(grep -q 'pr create' "$CALLS" && echo 1 || echo 0)"
+assert "gh pr create passed --assignee octocat" "1" "$(grep -q -- '--assignee octocat' "$CALLS" && echo 1 || echo 0)"
 assert "gh pr edit NOT called" "0" "$(grep -q 'pr edit' "$CALLS" && echo 1 || echo 0)"
 assert "branch pushed to origin" "1" "$(git -C "$ORIGIN" rev-parse --verify -q refs/heads/test/dogfood >/dev/null && echo 1 || echo 0)"
 assert_eq "token captured via stdin" "$TOKEN" "$(cat "$TOKENFILE")"
@@ -110,7 +112,37 @@ assert "head-sha is a real sha" "1" "$(is_sha "$(get_out head-sha)")"
 assert_eq "pull-number (reused)" "24680" "$(get_out pull-number)"
 assert_eq "pull-request (reused)" "https://github.com/fake/repo/pull/24680" "$(get_out pull-request)"
 assert "gh pr edit was called" "1" "$(grep -q 'pr edit' "$CALLS" && echo 1 || echo 0)"
+assert "gh pr edit passed --title" "1" "$(grep -q -- '--title' "$CALLS" && echo 1 || echo 0)"
+assert "gh pr edit passed --body-file" "1" "$(grep -q -- '--body-file' "$CALLS" && echo 1 || echo 0)"
+assert "gh pr edit passed --add-assignee octocat" "1" "$(grep -q -- '--add-assignee octocat' "$CALLS" && echo 1 || echo 0)"
 assert "gh pr create NOT called" "0" "$(grep -q 'pr create' "$CALLS" && echo 1 || echo 0)"
+
+# --- scenario: R1 (persisted checkout extraheader) ----------------------------
+# Simulate actions/checkout persisting the job GITHUB_TOKEN as an http
+# extraheader in .git/config. The push must still succeed (local origin, so the
+# mechanism - not the auth - is under test) and the key must be restored after.
+note "R1 (persisted checkout extraheader suppressed for the push, then restored)"
+WORK="$TMP/work-r1"; OUT="$TMP/out-r1.txt"
+CALLS="$TMP/calls-r1.log"; TOKENFILE="$TMP/token-r1"; ORIGIN="$TMP/origin-r1.git"
+cp -r "$TMP/base-origin.git" "$ORIGIN"
+git clone -q "$ORIGIN" "$WORK"
+( cd "$WORK"; git config user.name t; git config user.email t@example.com
+  git config --local 'http.https://github.com/.extraheader' 'AUTHORIZATION: token GITHUB-JOB' )
+echo change > "$WORK/change.txt"
+: > "$OUT"; : > "$CALLS"; : > "$TOKENFILE"
+set +e
+env GITHUB_WORKSPACE="$WORK" GITHUB_OUTPUT="$OUT" GITHUB_REPOSITORY="fake/repo" \
+    GITHUB_SERVER_URL="https://github.com" GITHUB_REF_NAME="main" \
+    FAKE_GH_CALL_LOG="$CALLS" FAKE_GH_TOKEN_FILE="$TOKENFILE" FAKE_GH_OPEN_PR=0 \
+    INPUT_COMMIT_MESSAGE="test: r1" INPUT_BRANCH="test/dogfood" \
+    INPUT_TOKEN="$TOKEN" INPUT_BASE="main" INPUT_LABELS="dogfood-test" \
+    PATH="$TMP/bin:$PATH" \
+    bash "$SCRIPT" 2>"$TMP/err-r1.log"
+rc=$?
+set -e
+assert "exits zero despite persisted extraheader" "0" "$rc"
+assert "push succeeded with persisted extraheader" "1" "$(git -C "$ORIGIN" rev-parse --verify -q refs/heads/test/dogfood >/dev/null && echo 1 || echo 0)"
+assert "extraheader restored in .git/config after" "1" "$(git -C "$WORK" config --local --get 'http.https://github.com/.extraheader' 2>/dev/null | grep -qx 'AUTHORIZATION: token GITHUB-JOB' && echo 1 || echo 0)"
 
 # --- scenario: no-op (no changes, no open PR) --------------------------------
 note "no-op (no changes, no open PR)"

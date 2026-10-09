@@ -21,7 +21,10 @@ jobs:
         uses: actions/checkout@v7
       - name: "Create path: fixture"
         id: create_path_fixture
-        run: echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt
+        run: |-
+          echo "OWNER_LOGIN=$(GH_TOKEN='${{ secrets.PROJEN_GITHUB_TOKEN }}' gh api user --jq .login)" >> "$GITHUB_ENV"
+          git config --local "http.$GITHUB_SERVER_URL/.extraheader" "AUTHORIZATION: basic aW52YWxpZA=="
+          echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt
       - name: "Create path: run the action"
         id: create
         uses: ./
@@ -31,6 +34,9 @@ jobs:
           branch: test/dogfood
           base: main
           labels: dogfood-test
+          assignees: ${{ env.OWNER_LOGIN }}
+          title: dogfood create
+          body: dogfood create body
       - name: "Create path: assert"
         id: create_path_assert
         run: |-
@@ -40,6 +46,8 @@ jobs:
           [ -n "${{ steps.create.outputs.pull-request }}" ]
           gh pr view test/dogfood --json state --jq .state | grep -qx open
           gh pr view test/dogfood --json labels --jq '.labels[].name' | grep -qx dogfood-test
+          gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx "$OWNER_LOGIN"
+          git config --local --get-all "http.$GITHUB_SERVER_URL/.extraheader" | grep -qx "AUTHORIZATION: basic aW52YWxpZA=="
       - name: "Re-run path: fixture"
         id: re-run_path_fixture
         run: echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt
@@ -52,12 +60,18 @@ jobs:
           branch: test/dogfood
           base: main
           labels: dogfood-test
+          assignees: ${{ env.OWNER_LOGIN }}
+          title: dogfood reuse
+          body: dogfood reuse body
       - name: "Re-run path: assert"
         id: re-run_path_assert
         run: |-
           set -euo pipefail
           [ "${{ steps.rerun.outputs.pull-number }}" -gt 0 ]
           [ "${{ steps.rerun.outputs.pull-number }}" = "${{ steps.create.outputs.pull-number }}" ]
+          gh pr view test/dogfood --json title --jq .title | grep -qx 'dogfood reuse'
+          gh pr view test/dogfood --json body --jq .body | grep -q 'dogfood reuse body'
+          gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx "$OWNER_LOGIN"
       - name: Cleanup
         id: cleanup
         if: always()
@@ -65,3 +79,4 @@ jobs:
           set -uo pipefail
           gh pr list --head test/dogfood --state open --json number --jq '.[].number' | while read -r n; do gh pr close "$n" --yes || true; done
           git push origin --delete test/dogfood || true
+          git config --local --unset-all "http.$GITHUB_SERVER_URL/.extraheader" || true

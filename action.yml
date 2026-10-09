@@ -31,6 +31,10 @@ inputs:
     description: >-
       Comma-separated labels applied to the pull request. Labels are ensured on
       both the create and the reuse path.
+  assignees:
+    description: >-
+      Comma-separated GitHub logins assigned to the pull request. Assignees are
+      ensured on both the create and the reuse path.
   author:
     description: >-
       The commit author in `Name <email>` form. Affects commit metadata only -
