@@ -3,8 +3,9 @@
 #
 # Simulates the action's runtime on a github.com runner using only local
 # tooling: a real git repo whose `origin` is a local bare repository, a fake
-# `gh` CLI, and the GITHUB_* / INPUT_* environment the composite action
-# provides. It exercises the state-machine paths:
+# `gh` CLI, and the GITHUB_* environment the runner provides. INPUT_* env vars
+# are set here to mirror the mapping in action.yml's env: block (which maps
+# the inputs context to INPUT_* names for the composite run: step).
 #
 #   create   - local changes, no open PR        -> commit, push, gh pr create
 #   reuse    - local changes, open PR present   -> commit, push, gh pr edit
@@ -28,6 +29,13 @@ assert_eq() { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1: expected=[$2] a
 assert()    { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1: expected=[$3] actual=[$2]"; fi; }
 get_out()   { sed -n "s/^$1=//p" "$OUT" | head -n1; }
 is_sha()    { [[ "$1" =~ ^[0-9a-f]{40}$ ]] && echo 1 || echo 0; }
+
+# --- static consistency: action.yml env: block covers all create-pr.sh INPUT_* reads ---
+note "static consistency (action.yml env: block vs create-pr.sh INPUT_* reads)"
+ACTION_YML="${REPO_ROOT}/action.yml"
+env_keys=$(grep -E '^\s+INPUT_[A-Z_]+:' "$ACTION_YML" | grep -oE 'INPUT_[A-Z_]+' | sort)
+script_reads=$(grep -oE 'INPUT_[A-Z_]+' "$SCRIPT" | sort -u)
+assert_eq "action.yml env: block provides exactly the INPUT_* vars create-pr.sh reads" "$script_reads" "$env_keys"
 
 # --- fake gh -----------------------------------------------------------------
 mkdir -p "$TMP/bin"

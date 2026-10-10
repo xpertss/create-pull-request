@@ -64,4 +64,19 @@ runs:
     - name: Create or reuse the pull request
       id: create-pr
       shell: bash
+      env:
+        # Composite actions do not populate the INPUT_* env vars the runner
+        # sets for other action types (actions/runner#665); create-pr.sh reads
+        # INPUT_* names, so expose each input via the inputs context.
+        INPUT_COMMIT_MESSAGE: ${{ inputs['commit-message'] }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_BODY: ${{ inputs.body }}
+        INPUT_LABELS: ${{ inputs.labels }}
+        INPUT_ASSIGNEES: ${{ inputs.assignees }}
+        INPUT_AUTHOR: ${{ inputs.author }}
+        INPUT_COMMITTER: ${{ inputs.committer }}
+        INPUT_SIGNOFF: ${{ inputs.signoff }}
       run: ${{ github.action_path }}/create-pr.sh
