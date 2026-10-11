@@ -17,16 +17,15 @@ const project = new GitHubActionProject({
         name: 'Create path',
         id: 'create',
         fixtureSteps: [
-          // R3: resolve the PAT owner's login so the `assignees` input can
-          // reference it (projen assigns the PR to the token owner).
-          "echo \"OWNER_LOGIN=$(GH_TOKEN='${{ secrets.PROJEN_GITHUB_TOKEN }}' gh api user --jq .login)\" >> \"$GITHUB_ENV\"",
           // R1: install a deliberately invalid persisted credential so the
           // push must go through the action's token, not this header.
           'git config --local "http.$GITHUB_SERVER_URL/.extraheader" "AUTHORIZATION: basic aW52YWxpZA=="',
           'echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt',
         ],
         inputs: {
-          token: '${{ secrets.PROJEN_GITHUB_TOKEN }}',
+          // no `token` input: the action defaults to the job's GITHUB_TOKEN
+          // (the job grants contents/pull-requests write), so the dogfood
+          // needs no secret at all.
           'commit-message': 'test: dogfood ${{ github.run_id }}',
           branch: 'test/dogfood',
           // explicit base: on pull_request triggers $GITHUB_REF_NAME is
@@ -34,7 +33,9 @@ const project = new GitHubActionProject({
           // action's default would be an invalid PR base here.
           base: 'main',
           labels: 'dogfood-test',
-          assignees: '${{ env.OWNER_LOGIN }}',
+          // R3: a real (assignable) user - the token owner under GITHUB_TOKEN
+          // is github-actions[bot], which cannot be assigned.
+          assignees: 'cfloersch',
           title: 'dogfood create',
           body: 'dogfood create body',
         },
@@ -46,8 +47,8 @@ const project = new GitHubActionProject({
           '[ -n "${{ steps.create.outputs.pull-request }}" ]',
           'gh pr view test/dogfood --json state --jq .state | grep -qx open',
           "gh pr view test/dogfood --json labels --jq '.labels[].name' | grep -qx dogfood-test",
-          // R3: the PR is assigned to the token owner.
-          "gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx \"$OWNER_LOGIN\"",
+          // R3: the PR is assigned to the user named in the inputs.
+          "gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx cfloersch",
           // R1: the credential the fixture installed is still present - the
           // action suppressed it for the push but did not rewrite the config.
           'git config --local --get-all "http.$GITHUB_SERVER_URL/.extraheader" | grep -qx "AUTHORIZATION: basic aW52YWxpZA=="',
@@ -63,12 +64,11 @@ const project = new GitHubActionProject({
           'echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt',
         ],
         inputs: {
-          token: '${{ secrets.PROJEN_GITHUB_TOKEN }}',
           'commit-message': 'test: dogfood ${{ github.run_id }}',
           branch: 'test/dogfood',
           base: 'main',
           labels: 'dogfood-test',
-          assignees: '${{ env.OWNER_LOGIN }}',
+          assignees: 'cfloersch',
           title: 'dogfood reuse',
           body: 'dogfood reuse body',
         },
@@ -79,7 +79,7 @@ const project = new GitHubActionProject({
           "gh pr view test/dogfood --json title --jq .title | grep -qx 'dogfood reuse'",
           "gh pr view test/dogfood --json body --jq .body | grep -q 'dogfood reuse body'",
           // R3: assignees still present.
-          "gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx \"$OWNER_LOGIN\"",
+          "gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx cfloersch",
         ],
       },
     ],
