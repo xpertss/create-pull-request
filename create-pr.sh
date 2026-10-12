@@ -233,9 +233,16 @@ if [[ -n "$OPEN_PR_NUMBER" ]]; then
 else
   # Create path: no open PR (or only closed/merged ones) for this branch.
   log "Creating a new pull request for branch '$branch' (base '$base')."
+  # `gh pr create` has no --json; it prints the new PR's URL as the last line
+  # of stdout, and the number is that URL's final path segment.
   pr_out="$(gh pr create --head "$branch" --base "$base" --title "$title" --body-file "$body_file" \
-    "${label_args[@]}" "${assignee_args[@]}" --json number,url --jq '[.number, .url] | @tsv')"
-  read -r pull_number pull_url <<< "$pr_out"
+    "${label_args[@]}" "${assignee_args[@]}")"
+  pull_url="$(printf '%s\n' "$pr_out" | tail -n 1)"
+  pull_number="${pull_url##*/}"
+  if [[ ! "$pull_number" =~ ^[0-9]+$ ]]; then
+    echo "::error::could not parse the PR number from 'gh pr create' output: $pr_out" >&2
+    exit 1
+  fi
   log "Created PR #$pull_number: $pull_url"
 fi
 rm -f "$body_file"

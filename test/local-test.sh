@@ -55,7 +55,9 @@ case "$cmd:$sub" in
   auth:setup-git) : ;;                       # local push needs no credential helper
   pr:list)        if [[ "${FAKE_GH_OPEN_PR:-0}" == "1" ]]; then printf '24680\n'; fi ;;
   pr:view)        printf 'https://github.com/fake/repo/pull/24680\n' ;;
-  pr:create)      printf '9999\thttps://github.com/fake/repo/pull/9999\n' ;;
+  # Like the real gh: no --json support; stdout is the new PR's URL.
+  pr:create)      if [[ " $* " == *" --json "* ]]; then echo 'unknown flag: --json' >&2; exit 1; fi
+                  printf 'https://github.com/fake/repo/pull/9999\n' ;;
   pr:edit)        : ;;
   *) printf 'fake gh: unknown command: %s %s\n' "$cmd" "$sub" >&2; exit 2 ;;
 esac

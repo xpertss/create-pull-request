@@ -48,16 +48,23 @@ inputs:
     description: Append a `Signed-off-by` trailer to the commit message.
     default: 'true'
 outputs:
+  # Composite actions must map each output from a step explicitly; without
+  # `value:` the output is always empty.
   head-ref:
     description: The head branch name.
+    value: ${{ steps.create-pr.outputs.head-ref }}
   head-sha:
     description: The SHA of the pushed commit; empty when nothing was pushed.
+    value: ${{ steps.create-pr.outputs.head-sha }}
   pull-number:
     description: The pull request number, or `0` when no PR exists or was created.
+    value: ${{ steps.create-pr.outputs.pull-number }}
   pull-request:
     description: The pull request URL, or empty.
+    value: ${{ steps.create-pr.outputs.pull-request }}
   commit-id:
     description: The SHA of the pushed commit (evans-compatible alias of `head-sha`).
+    value: ${{ steps.create-pr.outputs.commit-id }}
 runs:
   using: composite
   steps:
