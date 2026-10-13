@@ -32,7 +32,10 @@ const project = new GitHubActionProject({
           // the PR merge ref (e.g. "123/merge"), not a branch, so the
           // action's default would be an invalid PR base here.
           base: 'main',
-          labels: 'dogfood-test',
+          // A built-in GitHub label: it always exists, so the dogfood does
+          // not depend on repo state (a custom label that was never created
+          // made `gh pr create --label` fail with "not found").
+          labels: 'enhancement',
           // R3: a real (assignable) user - the token owner under GITHUB_TOKEN
           // is github-actions[bot], which cannot be assigned.
           assignees: 'cfloersch',
@@ -46,7 +49,7 @@ const project = new GitHubActionProject({
           '[ -n "${{ steps.create.outputs.head-sha }}" ]',
           '[ -n "${{ steps.create.outputs.pull-request }}" ]',
           'gh pr view test/dogfood --json state --jq .state | grep -qx open',
-          "gh pr view test/dogfood --json labels --jq '.labels[].name' | grep -qx dogfood-test",
+          "gh pr view test/dogfood --json labels --jq '.labels[].name' | grep -qx enhancement",
           // R3: the PR is assigned to the user named in the inputs.
           "gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx cfloersch",
           // R1: the credential the fixture installed is still present - the
@@ -67,7 +70,7 @@ const project = new GitHubActionProject({
           'commit-message': 'test: dogfood ${{ github.run_id }}',
           branch: 'test/dogfood',
           base: 'main',
-          labels: 'dogfood-test',
+          labels: 'enhancement',
           assignees: 'cfloersch',
           title: 'dogfood reuse',
           body: 'dogfood reuse body',
