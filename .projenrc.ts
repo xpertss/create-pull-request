@@ -89,10 +89,14 @@ const project = new GitHubActionProject({
     cleanup: [
       // best-effort (no -e): every line runs regardless of the others
       'set -uo pipefail',
-      "gh pr list --head test/dogfood --state open --json number --jq '.[].number' | while read -r n; do gh pr close \"$n\" --yes || true; done",
-      'git push origin --delete test/dogfood || true',
-      // R1: remove the persisted credential the fixture installed.
+      'gh pr list --head test/dogfood --state open --json number --jq \'[].number\' | while read -r n; do gh pr close "$n" --yes || true; done',
+      // R1: remove the persisted credential the fixture installed. Must run
+      // before the branch delete below: while the invalid extraheader is set
+      // locally, git pushes fail with 401 (the action suppressed it with -c
+      // for its own push only), so the delete would 401 and the branch would
+      // linger on the remote, masked by `|| true`.
       'git config --local --unset-all "http.$GITHUB_SERVER_URL/.extraheader" || true',
+      'git push origin --delete test/dogfood || true',
     ],
   },
 });
