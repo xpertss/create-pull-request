@@ -12,6 +12,13 @@ const project = new GitHubActionProject({
     //        persisted a (here invalid) credential as an http extraheader
     //   R2 - the re-run path updates the reused PR's title and body
     //   R3 - the assignees input is honored on create and reuse
+    //
+    // The job mints a short-lived builder GitHub App token (F020): the
+    // built-in github.token belongs to the GitHub Actions app, which is
+    // platform-forbidden from creating or approving pull requests. The minted
+    // token is also exposed to the shell steps as GH_TOKEN, since the org's
+    // runners do not inject the GITHUB_TOKEN env var.
+    appToken: {},
     scenario: [
       {
         name: 'Create path',
@@ -23,9 +30,9 @@ const project = new GitHubActionProject({
           'echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt',
         ],
         inputs: {
-          // no `token` input: the action defaults to the job's GITHUB_TOKEN
-          // (the job grants contents/pull-requests write), so the dogfood
-          // needs no secret at all.
+          // The Actions app token cannot create PRs, so the action runs with
+          // the builder App token minted by the appToken step (F020).
+          token: '${{ steps.token.outputs.token }}',
           'commit-message': 'test: dogfood ${{ github.run_id }}',
           branch: 'test/dogfood',
           // explicit base: on pull_request triggers $GITHUB_REF_NAME is
@@ -36,8 +43,8 @@ const project = new GitHubActionProject({
           // not depend on repo state (a custom label that was never created
           // made `gh pr create --label` fail with "not found").
           labels: 'enhancement',
-          // R3: a real (assignable) user - the token owner under GITHUB_TOKEN
-          // is github-actions[bot], which cannot be assigned.
+          // R3: a real (assignable) user - the token owner under the
+          // builder App is builder[bot], which cannot be assigned.
           assignees: 'cfloersch',
           title: 'dogfood create',
           body: 'dogfood create body',
@@ -67,6 +74,7 @@ const project = new GitHubActionProject({
           'echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt',
         ],
         inputs: {
+          token: '${{ steps.token.outputs.token }}',
           'commit-message': 'test: dogfood ${{ github.run_id }}',
           branch: 'test/dogfood',
           base: 'main',

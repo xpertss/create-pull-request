@@ -7,8 +7,11 @@ inputs:
   token:
     description: >-
       GitHub token used for the git push and all gh API calls. The pull request
-      is created by the token owner (PR `user` field), so a PAT (e.g.
-      PROJEN_GITHUB_TOKEN) is recommended so PRs trigger downstream workflows.
+      is created by the token owner (PR `user` field), so pass a token that is
+      permitted to create pull requests - the org's builder GitHub App token
+      (minted per-run from the PROJEN_APP_ID / PROJEN_APP_PRIVATE_KEY secrets)
+      is the recommended identity (F020); the built-in github.token cannot
+      create or approve pull requests.
     default: ${{ github.token }}
   commit-message:
     description: The full commit message (subject line plus body).

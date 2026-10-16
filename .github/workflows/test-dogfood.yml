@@ -19,8 +19,16 @@ jobs:
       - name: Checkout
         id: checkout
         uses: actions/checkout@v7
+      - name: Generate GitHub App token
+        id: token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.PROJEN_APP_ID }}
+          private-key: ${{ secrets.PROJEN_APP_PRIVATE_KEY }}
       - name: "Create path: fixture"
         id: create_path_fixture
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |-
           git config --local "http.$GITHUB_SERVER_URL/.extraheader" "AUTHORIZATION: basic aW52YWxpZA=="
           echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt
@@ -28,6 +36,7 @@ jobs:
         id: create
         uses: ./
         with:
+          token: ${{ steps.token.outputs.token }}
           commit-message: "test: dogfood ${{ github.run_id }}"
           branch: test/dogfood
           base: main
@@ -37,6 +46,8 @@ jobs:
           body: dogfood create body
       - name: "Create path: assert"
         id: create_path_assert
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |-
           set -euo pipefail
           [ "${{ steps.create.outputs.pull-number }}" -gt 0 ]
@@ -48,11 +59,14 @@ jobs:
           git config --local --get-all "http.$GITHUB_SERVER_URL/.extraheader" | grep -qx "AUTHORIZATION: basic aW52YWxpZA=="
       - name: "Re-run path: fixture"
         id: re-run_path_fixture
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: echo "$(date -u +%Y%m%dT%H%M%SZ)" >> test/fixtures/dogfood-state.txt
       - name: "Re-run path: run the action"
         id: rerun
         uses: ./
         with:
+          token: ${{ steps.token.outputs.token }}
           commit-message: "test: dogfood ${{ github.run_id }}"
           branch: test/dogfood
           base: main
@@ -62,6 +76,8 @@ jobs:
           body: dogfood reuse body
       - name: "Re-run path: assert"
         id: re-run_path_assert
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |-
           set -euo pipefail
           [ "${{ steps.rerun.outputs.pull-number }}" -gt 0 ]
@@ -72,6 +88,8 @@ jobs:
       - name: Cleanup
         id: cleanup
         if: always()
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |-
           set -uo pipefail
           gh pr list --head test/dogfood --state open --json number --jq '[].number' | while read -r n; do gh pr close "$n" --yes || true; done

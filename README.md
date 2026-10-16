@@ -16,7 +16,7 @@ that commits the working tree, pushes a machine-owned head branch, and creates
 
 | Input | Required | Default | Notes |
 |---|---|---|---|
-| `token` | no | `${{ github.token }}` | PAT (e.g. `PROJEN_GITHUB_TOKEN`) recommended so PRs trigger downstream workflows. The PR's `user` field is the **token owner**. |
+| `token` | no | `${{ github.token }}` | A token permitted to create pull requests - the org's builder GitHub App token (F020) is recommended; the built-in `github.token` (GitHub Actions app) cannot create or approve PRs. The PR's `user` field is the **token owner**. |
 | `commit-message` | yes | — | Full commit message (subject + body). |
 | `branch` | yes | — | Head branch name, e.g. `github-actions/upgrade-main`. Machine-owned; the action force-pushes it. |
 | `base` | no | `$GITHUB_REF_NAME` | Base branch for the PR. Pass it explicitly in a `pull_request` context, where `$GITHUB_REF_NAME` is the merge ref, not a branch. |
@@ -45,9 +45,12 @@ authorship rules) behaves as with the evans action.
 
 ## Required caller permissions
 
-Either a PAT with `contents: write` + `pull-requests: write` (preferred —
-current `PROJEN_GITHUB_TOKEN` usage), or the default token with job
-`permissions: contents: write, pull-requests: write`.
+A token with `contents: write` + `pull-requests: write` that is permitted to
+create pull requests: the org's builder GitHub App token (minted per-run from
+the org-level `PROJEN_APP_ID` / `PROJEN_APP_PRIVATE_KEY` secrets, F020) is the
+recommended identity. The built-in `github.token` has the right permissions but
+its owner (the GitHub Actions app) is platform-forbidden from creating or
+approving pull requests.
 
 ## Behavior
 
@@ -79,9 +82,15 @@ jobs:
       - uses: actions/checkout@v7
       - name: Apply dependency upgrade
         run: npx projen upgrade
+      - name: Mint builder App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.PROJEN_APP_ID }}
+          private-key: ${{ secrets.PROJEN_APP_PRIVATE_KEY }}
       - uses: xpertss/create-pull-request@v1
         with:
-          token: ${{ secrets.PROJEN_GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore(deps): upgrade dependencies"
           branch: github-actions/upgrade-main
           base: main
@@ -138,7 +147,7 @@ env is read; no env is dumped to logs.
 ### Token flow
 
 ```
-secret (PROJEN_GITHUB_TOKEN / github.token)
+builder App token (PROJEN_APP_ID / PROJEN_APP_PRIVATE_KEY, minted per-run)
   → action input `token`
   → `gh auth login --with-token`   (stored in ~/.config/gh on the ephemeral runner)
   → used for: gh API calls + git push credential helper
