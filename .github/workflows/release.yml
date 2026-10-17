@@ -43,7 +43,7 @@ jobs:
         run: npm ci
       - name: release
         id: release
-        run: npx projen@0.103.25 release
+        run: npx projen@0.104.8 release
       - name: Check if version has already been tagged
         id: check_tag_exists
         run: |-
