@@ -54,7 +54,7 @@ jobs:
           [ "${{ steps.create.outputs.pull-number }}" -gt 0 ]
           [ -n "${{ steps.create.outputs.head-sha }}" ]
           [ -n "${{ steps.create.outputs.pull-request }}" ]
-          gh pr view test/dogfood --json state --jq .state | grep -qx open
+          gh pr view test/dogfood --json state --jq .state | grep -qx OPEN
           gh pr view test/dogfood --json labels --jq '.labels[].name' | grep -qx enhancement
           gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx cfloersch
           git config --local --get-all "http.$GITHUB_SERVER_URL/.extraheader" | grep -qx "AUTHORIZATION: basic aW52YWxpZA=="
@@ -93,6 +93,6 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |-
           set -uo pipefail
-          gh pr list --head test/dogfood --state open --json number --jq '[].number' | while read -r n; do gh pr close "$n" --yes || true; done
+          gh pr list --head test/dogfood --state open --json number --jq '.[].number' | while read -r n; do gh pr close "$n" --yes || true; done
           git config --local --unset-all "http.$GITHUB_SERVER_URL/.extraheader" || true
           git push origin --delete test/dogfood || true

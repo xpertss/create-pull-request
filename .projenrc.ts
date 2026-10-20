@@ -55,7 +55,9 @@ const project = new GitHubActionProject({
           '[ "${{ steps.create.outputs.pull-number }}" -gt 0 ]',
           '[ -n "${{ steps.create.outputs.head-sha }}" ]',
           '[ -n "${{ steps.create.outputs.pull-request }}" ]',
-          'gh pr view test/dogfood --json state --jq .state | grep -qx open',
+          // gh emits the state as the uppercase GraphQL enum (OPEN), so the
+          // match must be case-exact or the pipe silently fails under grep.
+          'gh pr view test/dogfood --json state --jq .state | grep -qx OPEN',
           "gh pr view test/dogfood --json labels --jq '.labels[].name' | grep -qx enhancement",
           // R3: the PR is assigned to the user named in the inputs.
           "gh pr view test/dogfood --json assignees --jq '.assignees[].login' | grep -qx cfloersch",
@@ -97,7 +99,7 @@ const project = new GitHubActionProject({
     cleanup: [
       // best-effort (no -e): every line runs regardless of the others
       'set -uo pipefail',
-      'gh pr list --head test/dogfood --state open --json number --jq \'[].number\' | while read -r n; do gh pr close "$n" --yes || true; done',
+      'gh pr list --head test/dogfood --state open --json number --jq \'.[].number\' | while read -r n; do gh pr close "$n" --yes || true; done',
       // R1: remove the persisted credential the fixture installed. Must run
       // before the branch delete below: while the invalid extraheader is set
       // locally, git pushes fail with 401 (the action suppressed it with -c
