@@ -14,6 +14,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       WATCH_PATHS: .github/workflows/** .github/actions/**
+    if: github.head_ref != 'test/dogfood' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - name: Check for workflow/action changes
         id: check_for_workflow_action_changes

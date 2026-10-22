@@ -13,12 +13,13 @@ jobs:
       pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
+    if: github.head_ref != 'test/dogfood' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - name: Checkout
         id: checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
       - name: Setup Node
         id: setup_node
